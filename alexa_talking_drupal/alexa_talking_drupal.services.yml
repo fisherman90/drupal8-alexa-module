@@ -1,0 +1,5 @@
+services:
+  alexa_talking_drupal.request_subscriber:
+    class: Drupal\alexa_talking_drupal\EventSubscriber\RequestSubscriber
+    tags:
+      - { name: event_subscriber }
