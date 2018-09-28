@@ -3,6 +3,7 @@
 namespace Drupal\alexa_talking_drupal\EventSubscriber;
 
 use Drupal\alexa\AlexaEvent;
+use Drupal\node\Entity\Node;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -33,6 +34,7 @@ class RequestSubscriber implements EventSubscriberInterface {
       // Von Amazon festgelegter HELP-Intent.
       case 'AMAZON.HelpIntent':
         $response->respond('Dies ist die "Talking Drupal" Demo. Du kannst nach Neuigkeiten fragen oder im Drupal-Glossar suchen.');
+        $response->shouldEndSession = TRUE;
         break;
 
       // Selbst erstellter News-Intent um die aktuellste vorlesen zu lassen.
@@ -44,21 +46,34 @@ class RequestSubscriber implements EventSubscriberInterface {
       // Selbst erstellter Glossar-Intent, der einen Slot verwendet.
       case 'GlossaryIntent':
 
-        // Slot holen
+        // Slot holen.
         $slot = $request->getSlot('term');
 
+        // Checken, ob slot gesetzt wurde.
         if ($slot == FALSE && $request->data['request']['dialogState'] == "STARTED") {
 
-          // Slot war leer, aber Intent wurde erkannt > Nachfragen
+          // Slot war leer, aber Intent wurde erkannt > Nachfragen.
           $response->respond('Zu welchem Element möchtest du Informationen erhalten?')
             ->reprompt('Bitte sag zum Beispiel "zum Block" oder "zum View"');
         }
         else {
 
-          // Slot war gefüllt und wurde erkannt, hole die passende Entity als Response
+          // Slot war gefüllt und wurde erkannt, hole die passende Entity als Response.
           $response->respondSSML($this->getGlossaryOutput($slot));
           $response->shouldEndSession = TRUE;
         }
+        break;
+
+      // MusicIntent.
+      case 'MusicIntent':
+        $response->respondSSML('<speak>Weiß nicht, ob ich das Musik nennen würde, aber gut... <audio src="soundbank://soundlibrary/musical/amzn_sfx_musical_drone_intro_01"/></speak>');
+        $response->shouldEndSession = TRUE;
+        break;
+
+      // DoneIntent.
+      case 'DoneIntent':
+        $response->respond('Wir danken euch allen für eure Aufmerksamkeit und sind gespannt, was für Skills ihr so bauen werdet!');
+        $response->shouldEndSession = TRUE;
         break;
 
       // Default wird getriggert, wenn Amazon keinen Intent erkennen konnte oder dieser oben nicht definiert wurde.
@@ -69,6 +84,11 @@ class RequestSubscriber implements EventSubscriberInterface {
     }
   }
 
+  /**
+   * Called on NewsIntent, returns SSML.
+   *
+   * @return string
+   */
   public function getNewsOutput() {
     $query = \Drupal::entityQuery('node');
     $query
@@ -81,20 +101,28 @@ class RequestSubscriber implements EventSubscriberInterface {
     if (count($entity_ids) > 0) {
 
       foreach ($entity_ids as $nid) {
-        $node = \Drupal\node\Entity\Node::load($nid);
+        $node = Node::load($nid);
         $title = $node->getTitle();
-        $body = strip_tags($node->get('body')->value, '<p></p>');
+        $body = strip_tags(html_entity_decode($node->get('body')->value), '<p></p>');
       }
 
-      return '<speak>Drupal sagt: Die aktuellste News ist "' . $title . '"<break strength="strong" />' . $body . '</speak>';
+      return '<speak>Die aktuellste News ist "' . $title . '"<break strength="strong" />' . $body . '</speak>';
     }
     else {
       return '<speak>Drupal konnte keine News finden.</speak>';
     }
   }
 
+  /**
+   * Called on GlossaryIntent, returns SSML.
+   *
+   * @param string $term
+   * The term the user asked for.
+   *
+   * @return string
+   */
   public function getGlossaryOutput($term = '') {
-    if ($term && $term !== '') {
+    if (!empty($term)) {
 
       $query = \Drupal::entityQuery('node');
       $query
@@ -105,7 +133,7 @@ class RequestSubscriber implements EventSubscriberInterface {
       $entity_ids = $query->execute();
 
       foreach ($entity_ids as $nid) {
-        $node = \Drupal\node\Entity\Node::load($nid);
+        $node = Node::load($nid);
         $title = $node->getTitle();
         $body = strip_tags($node->get('field_body')->value, '<p></p>');
       }
